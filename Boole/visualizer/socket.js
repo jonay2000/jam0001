@@ -68,6 +68,7 @@ function startSocket() {
                     break;
                 }
                 case "MoveTrain": {
+                    waitUntilContinue = false;
                     const from_station_name = message["from_station"]["name"];
                     const from_track = message["start_track"];
                     const to_station_name = message["to_station"]["name"];

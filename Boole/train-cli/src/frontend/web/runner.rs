@@ -19,6 +19,7 @@ use tokio::sync::Mutex;
 use tokio::task;
 use std::num::ParseIntError;
 use std::time::Duration;
+use crate::frontend::web::layout::layout_to_file;
 
 #[derive(Serialize)]
 struct VisualizerStation {
@@ -75,93 +76,104 @@ impl WebRunner {
     }
 
     pub async fn generate_visualizer_file(&self, connection_id: String) -> Result<PathBuf, GenerateVisualizerDataError> {
-        let mut res = Vec::new();
-
-        let mut indices = HashMap::new();
-
-        for (index, i) in self.program.stations.iter().enumerate() {
-            indices.insert(&i.name, index);
-        }
-
-        for station in &self.program.stations {
-            let mut to = Vec::new();
-            for i in &station.output {
-                // make 1 indexed (again)
-                to.push(vec![*indices.get(&i.station).expect("must exist"), i.track + 1])
+        for i in 0..1000 {
+            match layout_to_file(&self.program, connection_id.clone()).await {
+                Ok(path) => {
+                    log::info!("Generated layout after {} attempt(s).", i+1);
+                    return Ok(path)
+                },
+                Err(_) => {}
             }
-
-            res.push(VisualizerStation {
-                r#type: station.operation,
-                inputs: station.operation.input_track_count(),
-                to,
-                name: station.name.to_string(),
-            })
         }
+        layout_to_file(&self.program, connection_id.clone()).await
 
-        let serialized = serde_json::to_string_pretty(&res)?;
-
-        let mut path = PathBuf::new();
-        path.push("visualizer");
-        path.push("visualizer_setup");
-        path.push(format!("{}.json", connection_id));
-
-
-        if path.exists() {
-            std::fs::remove_file(&path)?;
-        }
-
-        let mut file = File::create(&path)?;
-        file.write_all(serialized.as_bytes())?;
-
-        log::info!("calling python script to generate station layout");
-
-        let python_executor = std::env::var("PYTHON_EXECUTABLE").unwrap_or("python".to_string());
-        let mut command = Command::new(python_executor);
-        command.arg("visualizer/router.py")
-            .arg(format!("{:?}", &path));
-        command.current_dir(".");
-
-        let mut child = command.spawn()?;
-        // match procinfo::pid::status(child.id() as i32) {
-        //     Ok(mem_status) => {
-        //         let mem_size = mem_status.vm_size;
-        //         log::info!("{} kb", mem_size);
+        // let mut res = Vec::new();
+        //
+        // let mut indices = HashMap::new();
+        //
+        // for (index, i) in self.program.stations.iter().enumerate() {
+        //     indices.insert(&i.name, index);
+        // }
+        //
+        // for station in &self.program.stations {
+        //     let mut to = Vec::new();
+        //     for i in &station.output {
+        //         // make 1 indexed (again)
+        //         to.push(vec![*indices.get(&i.station).expect("must exist"), i.track + 1])
         //     }
-        //     Err(e) => {
-        //         return Err(e.into());
+        //
+        //     res.push(VisualizerStation {
+        //         r#type: station.operation,
+        //         inputs: station.operation.input_track_count(),
+        //         to,
+        //         name: station.name.to_string(),
+        //     })
+        // }
+        //
+        // let serialized = serde_json::to_string_pretty(&res)?;
+        //
+        // let mut path = PathBuf::new();
+        // path.push("visualizer");
+        // path.push("visualizer_setup");
+        // path.push(format!("{}.json", connection_id));
+        //
+        //
+        // if path.exists() {
+        //     std::fs::remove_file(&path)?;
+        // }
+        //
+        // let mut file = File::create(&path)?;
+        // file.write_all(serialized.as_bytes())?;
+        //
+        // log::info!("calling python script to generate station layout");
+        //
+        // let python_executor = std::env::var("PYTHON_EXECUTABLE").unwrap_or("python".to_string());
+        // let mut command = Command::new(python_executor);
+        // command.arg("visualizer/router.py")
+        //     .arg(format!("{:?}", &path));
+        // command.current_dir(".");
+        //
+        // let mut child = command.spawn()?;
+        // // match procinfo::pid::status(child.id() as i32) {
+        // //     Ok(mem_status) => {
+        // //         let mem_size = mem_status.vm_size;
+        // //         log::info!("{} kb", mem_size);
+        // //     }
+        // //     Err(e) => {
+        // //         return Err(e.into());
+        // //     }
+        // // }
+        //
+        // log::info!("python id: {}", child.id());
+        // let memlimit = if let Ok(e) = std::env::var("PYTHON_MEMLIMIT") {
+        //     e.parse()?
+        // } else {
+        //     8000000
+        // };
+        // while let Ok(None) = child.try_wait() {
+        //     tokio::time::sleep(Duration::from_secs(1)).await;
+        //     let usage = WebRunner::python_mem_usage(child.id());
+        //
+        //         log::info!("Python is using {} kb of memory ({} mb, {} gb)", usage, usage/1024, usage/1024/1024);
+        //
+        //
+        //     if usage > memlimit {
+        //         child.kill().unwrap();
         //     }
         // }
-
-        log::info!("python id: {}", child.id());
-        let memlimit = if let Ok(e) = std::env::var("PYTHON_MEMLIMIT") {
-            e.parse()?
-        } else {
-            8000000
-        };
-        while let Ok(None) = child.try_wait() {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            let usage = WebRunner::python_mem_usage(child.id());
-
-                log::info!("Python is using {} kb of memory ({} mb, {} gb)", usage, usage/1024, usage/1024/1024);
-
-
-            if usage > memlimit {
-                child.kill().unwrap();
-            }
-        }
-
-        let status = child.wait()?;
-        if !status.success() {
-            return Err(GenerateVisualizerDataError::GenerateVisualizerData);
-        }
-        log::info!("finished generating station layout");
-
-
-        let mut path = PathBuf::new();
-        path.push("visualizer_setup");
-        path.push(format!("{}.json.result.json", connection_id));
-
-        Ok(path)
+        //
+        // let status = child.wait()?;
+        // if !status.success() {
+        //     return Err(GenerateVisualizerDataError::GenerateVisualizerData);
+        // }
+        // log::info!("finished generating station layout");
+        //
+        //
+        // let mut path = PathBuf::new();
+        // path.push("visualizer_setup");
+        // path.push(format!("{}.json.result.json", connection_id));
+        //
+        // Ok(path)
     }
 
     #[cfg(unix)]

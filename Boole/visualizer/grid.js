@@ -112,7 +112,8 @@ function updateStatus() {
     updateFinishedValue();
 
     if (stopcount === grid.trains.size) {
-        if (continueSimulation) {
+        if (continueSimulation && !waitUntilContinue) {
+            waitUntilContinue = true;
             socket.nextTimeStep()
         }
     }
@@ -390,8 +391,6 @@ class Train {
             }
         }
 
-        console.log(this.cart_locations);
-
         this.animation_count += TRAIN_SPEED;
 
         this.ticks_left -= 1;
@@ -455,7 +454,7 @@ class Train {
         push()
         if (this.path !== null) {
             this.ticks_since_last_cloud += 1;
-            if (this.ticks_since_last_cloud > 2 / TRAIN_SPEED / 10) {
+            if (this.ticks_since_last_cloud > 2 / TRAIN_SPEED / 6) {
                 this.ticks_since_last_cloud = 0;
                 this.clouds.push(new Cloud(createVector(this.location.x * TILE_SIZE, this.location.y * TILE_SIZE)));
             }

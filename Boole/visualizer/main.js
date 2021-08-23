@@ -19,6 +19,7 @@ function togglePause() {
 }
 
 let continueSimulation = false;
+let waitUntilContinue = false;
 function toggleContinue() {
     continueSimulation = !continueSimulation;
     if (continueSimulation) {

@@ -11,6 +11,10 @@ use train::vm::Data;
 use crate::frontend::cli::CliRunner;
 use sha3::{Digest, Sha3_512};
 
+extern crate strum;
+#[macro_use]
+extern crate strum_macros;
+
 #[tokio::main(flavor = "multi_thread", worker_threads = 5)]
 async fn main() {
     pretty_env_logger::env_logger::builder()
