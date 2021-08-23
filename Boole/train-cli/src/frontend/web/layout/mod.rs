@@ -215,7 +215,7 @@ enum LineTile {
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 enum LinePoint {
     Start,
-    Regular((usize, usize)),
+    Regular((usize, usize), Option<Direction>),
     MidCross((usize, usize), Direction)
 }
 
@@ -223,7 +223,7 @@ impl LinePoint {
     pub fn tuple(self) -> (usize, usize) {
         match self {
             LinePoint::Start => unreachable!(),
-            LinePoint::Regular(n) => n,
+            LinePoint::Regular(n, _) => n,
             LinePoint::MidCross(n, _) => n,
         }
     }
@@ -244,18 +244,18 @@ fn run_astar(grid: &mut Vec<Vec<LineTile>>, from: Vec<(usize, usize)>, to: Vec<(
         |n| {
             match n {
                 LinePoint::Start => {
-                    from.iter().map(|&l| (LinePoint::Regular(l), 0)).collect()
+                    from.iter().map(|&l| (LinePoint::Regular(l, None), 0)).collect()
                 },
-                LinePoint::Regular(n) => {
+                LinePoint::Regular(n, straight) => {
                     Direction::iter().map(|dir: Direction| {
                         match move_dir(*n, dir) {
                             None => vec![],
                             Some(nb) => match grid[nb.0][nb.1] {
                                 LineTile::Station => {
                                     if to.contains(&nb) {
-                                        vec![(LinePoint::Regular(nb), 1)]
+                                        vec![(LinePoint::Regular(nb, Some(dir)), 10)]
                                     }else if from.contains(n) && from.contains(&nb) {
-                                        vec![(LinePoint::Regular(nb), 0)]
+                                        vec![(LinePoint::Regular(nb, Some(dir)), 0)]
                                     } else {
                                         vec![]
                                     }
@@ -263,13 +263,23 @@ fn run_astar(grid: &mut Vec<Vec<LineTile>>, from: Vec<(usize, usize)>, to: Vec<(
                                 LineTile::Track(to_stat, to_stat_track) => {
                                     if station == to_stat && station_track == to_stat_track {
                                         //We can join
-                                        vec![(LinePoint::Regular(nb), 0)]
+                                        vec![(LinePoint::Regular(nb, Some(dir)), 0)]
                                     } else {
                                         //We can (try to) cross
-                                        vec![(LinePoint::MidCross(nb, dir), 3)]
+                                        vec![(LinePoint::MidCross(nb, dir), 50)]
                                     }
                                 },
-                                LineTile::Empty => vec![(LinePoint::Regular(nb), 1)],
+                                LineTile::Empty => {
+                                    if let Some(straight) = straight {
+                                        if *straight == dir {
+                                            vec![(LinePoint::Regular(nb, Some(dir)), 9)]
+                                        } else {
+                                            vec![(LinePoint::Regular(nb, Some(dir)), 10)]
+                                        }
+                                    }else {
+                                        vec![(LinePoint::Regular(nb, Some(dir)), 10)]
+                                    }
+                                },
                                 _ => unreachable!(),
                             }
                         }
@@ -281,7 +291,7 @@ fn run_astar(grid: &mut Vec<Vec<LineTile>>, from: Vec<(usize, usize)>, to: Vec<(
                         Some(nb) => match grid[nb.0][nb.1] {
                             LineTile::Station => {
                                 if to.contains(&nb) {
-                                    vec![(LinePoint::Regular(nb), 1)]
+                                    vec![(LinePoint::Regular(nb, Some(*dir)), 10)]
                                 } else {
                                     vec![]
                                 }
@@ -290,7 +300,7 @@ fn run_astar(grid: &mut Vec<Vec<LineTile>>, from: Vec<(usize, usize)>, to: Vec<(
                                 //Can only cross a single track
                                 vec![]
                             },
-                            LineTile::Empty => vec![(LinePoint::Regular(nb), 1)],
+                            LineTile::Empty => vec![(LinePoint::Regular(nb, Some(*dir)), 10)],
                             _ => unreachable!(),
                         }
                     }
@@ -300,7 +310,7 @@ fn run_astar(grid: &mut Vec<Vec<LineTile>>, from: Vec<(usize, usize)>, to: Vec<(
         |n| 0,
         |n| match n {
             LinePoint::Start => false,
-            LinePoint::Regular(n) => to.contains(n),
+            LinePoint::Regular(n, _) => to.contains(n),
             LinePoint::MidCross(n, d) => false,
         },
     ).ok_or(GenerateVisualizerDataError::GenerateVisualizerData)?.0;
